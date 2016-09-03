@@ -28,7 +28,7 @@ module LogsVisualizer
         sql_insertions = []
         sql_selections = []
         sql_updates = []
-        serialisers = []
+        serializers = []
 
         unless /.*\"\/assets.*/.match(action_parsed)
           action.split("\r\n").each do |log_line|
@@ -41,36 +41,36 @@ module LogsVisualizer
             sql_update_in_line = /\((?<time>\S*)ms\).*UPDATE (?<table>(\S)*)/.match(log_line)
             serializer_in_line = /\[active_model_serializers\] Rendered (?<serializer>\S*) with .* \((?<time>\S*)ms\)/.match(log_line)
 
-            if partial_in_line.present? && options[:rendered_partials] == 'true'
+            if partial_in_line.present? && (options[:rendered_partials] == true || options[:all] == true)
               rendered_partials << { :partial => partial_in_line[:partial], :time => partial_in_line[:time].to_f }
             end
 
-            if service_time_in_line.present? && options[:service_requests] == 'true'
+            if service_time_in_line.present? && (options[:service_requests] == true || options[:all] == true)
               service_times << service_time_in_line[:time].to_f
             end
 
-            if service_request_in_line.present? && options[:service_requests] == 'true'
+            if service_request_in_line.present? && (options[:service_requests] == true || options[:all] == true)
               service_requests << service_request_in_line[:service]
             end
 
-            if compiled_asset_in_line.present? && options[:compiled_assets] == 'true'
+            if compiled_asset_in_line.present? && (options[:compiled_assets] == true || options[:all] == true)
               compiled_assets << { :asset => compiled_asset_in_line[:asset], :time => compiled_asset_in_line[:time].to_f }
             end
 
-            if sql_insertion_in_line.present? && options[:sql_visualization] == 'true'
+            if sql_insertion_in_line.present? && (options[:sql_visualization] == true || options[:all] == true)
               sql_insertions <<  { :table => sql_insertion_in_line[:table], :time => sql_insertion_in_line[:time].to_f }
             end
 
-            if sql_select_in_line.present? && options[:sql_visualization] == 'true'
+            if sql_select_in_line.present? && (options[:sql_visualization] == true || options[:all] == true)
               sql_selections << { :table => sql_select_in_line[:table], :time => sql_select_in_line[:time].to_f }
             end
 
-            if sql_update_in_line.present? && options[:sql_visualization] == 'true'
+            if sql_update_in_line.present? && (options[:sql_visualization] == true || options[:all] == true)
               sql_updates << { :table => sql_update_in_line[:table], :time => sql_update_in_line[:time].to_f }
             end
 
-            if serializer_in_line.present? && options[:serialisers] == 'true'
-              serialisers << { :serializer => serializer_in_line[:table], :time => serializer_in_line[:time].to_f }
+            if serializer_in_line.present? && (options[:serializers] == true || options[:all] == true)
+              serializers << { :serializer => serializer_in_line[:serializer], :time => serializer_in_line[:time].to_f }
             end
           end
 
@@ -97,7 +97,7 @@ module LogsVisualizer
                 :sql_insertions => sql_insertions.group_by { |x| x[:table] },
                 :sql_selections => sql_selections.group_by { |x| x[:table] },
                 :sql_updates => sql_updates.group_by { |x| x[:table] },
-                :serialisers => serialisers.group_by { |x| x[:serializer] },
+                :serializers => serializers.group_by { |x| x[:serializer] },
             }
           end
         end
@@ -118,7 +118,7 @@ module LogsVisualizer
         maximum_sql_selection_time = node[:sql_selections].map { |array_name, names_array| names_array.inject(0){|sum,x| sum + x[:time] }.round(2) }.max
         maximum_sql_update_time = node[:sql_updates].map { |array_name, names_array| names_array.inject(0){|sum,x| sum + x[:time] }.round(2) }.max
         maximum_service_time = node[:service_requests].group_by { |x| x[:service] }.map { |service, services_array| (services_array.inject(0){|sum,x| sum + x[:time] } * 1000).round(2) }.max
-        maximum_serialier_time = node[:serialisers].group_by { |x| x[:serializer] }.map { |service, services_array| (services_array.inject(0){|sum,x| sum + x[:time] } * 1000).round(2) }.max
+        maximum_serializer_time = node[:serializers].map { |array_name, names_array| (names_array.inject(0){|sum,x| sum + x[:time] }).round(2) }.max
 
         minimum_rendered_time = node[:rendered_partials].map { |partial, partials_array| partials_array.inject(0){|sum,x| sum + x[:time] }.round(2) }.min
         minimum_sql_insertion_time = node[:sql_insertions].map { |array_name, names_array| names_array.inject(0){|sum,x| sum + x[:time] }.round(2) }.min
@@ -126,7 +126,7 @@ module LogsVisualizer
         minimum_sql_selection_time = node[:sql_selections].map { |array_name, names_array| names_array.inject(0){|sum,x| sum + x[:time] }.round(2) }.min
         minimum_sql_update_time = node[:sql_updates].map { |array_name, names_array| names_array.inject(0){|sum,x| sum + x[:time] }.round(2) }.min
         minimum_service_time = node[:service_requests].group_by { |x| x[:service] }.map { |service, services_array| (services_array.inject(0){|sum,x| sum + x[:time] } * 1000).round(2) }.min
-        minimum_serialier_time = node[:serialisers].group_by { |x| x[:serializer] }.map { |service, services_array| (services_array.inject(0){|sum,x| sum + x[:time] } * 1000).round(2) }.min
+        minimum_serializer_time = node[:serializers].map { |service, services_array| (services_array.inject(0){|sum,x| sum + x[:time] }).round(2) }.min
 
         node[:rendered_partials].each do |partial, partials_array|
           partial_node = graph.add_nodes(partial, :shape => :component)
@@ -156,15 +156,16 @@ module LogsVisualizer
           end
         end
 
-        node[:serialisers].each do |name, serialiers_array|
+        node[:serializers].each do |name, serializers_array|
           graph_node = graph.add_nodes(name, :shape => :msquare)
-          total_time = serialiers_array.inject(0){|sum,x| sum + x[:time] }.round(2)
-          if maximum_asset_compilation_time == total_time
-            graph.add_edges( node[:graph_node], graph_node, :label => "<<i>Compiles asset<br/>(#{assets_array.size} times)<br/>in <b>#{assets_array.inject(0){|sum,x| sum + x[:time] }.round(2)}ms</b></i>>", :color => 'red', :fontcolor => 'red')
-          elsif minimum_asset_compilation_time == total_time
-            graph.add_edges( node[:graph_node], graph_node, :label => "<<i>Compiles asset<br/>(#{assets_array.size} times)<br/>in <b>#{assets_array.inject(0){|sum,x| sum + x[:time] }.round(2)}ms</b></i>>", :color => 'darkgreen', :fontcolor => 'darkgreen')
+          total_time = serializers_array.inject(0){|sum,x| sum + x[:time] }.round(2)
+
+          if maximum_serializer_time == total_time
+            graph.add_edges( node[:graph_node], graph_node, :label => "<<i>Serializes through<br/>(#{serializers_array.size} times)<br/>in <b>#{serializers_array.inject(0){|sum,x| sum + x[:time] }.round(2)}ms</b></i>>", :color => 'red', :fontcolor => 'red')
+          elsif minimum_serializer_time == total_time
+            graph.add_edges( node[:graph_node], graph_node, :label => "<<i>Serializes through<br/>(#{serializers_array.size} times)<br/>in <b>#{serializers_array.inject(0){|sum,x| sum + x[:time] }.round(2)}ms</b></i>>", :color => 'darkgreen', :fontcolor => 'darkgreen')
           else
-            graph.add_edges( node[:graph_node], graph_node, :label => "<<i>Compiles asset<br/>(#{assets_array.size} times)<br/>in #{assets_array.inject(0){|sum,x| sum + x[:time] }.round(2)}ms</i>>")
+            graph.add_edges( node[:graph_node], graph_node, :label => "<<i>Serializes through<br/>(#{serializers_array.size} times)<br/>in #{serializers_array.inject(0){|sum,x| sum + x[:time] }.round(2)}ms</i>>")
           end
         end
 
