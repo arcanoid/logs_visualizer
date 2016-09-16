@@ -229,7 +229,10 @@ module LogsVisualizer
         end
       end
 
-      directory_name = 'graphs'
+      directory_name = 'app/assets/images/graphs'
+      FileUtils.mkdir_p('app') unless File.directory?('app')
+      FileUtils.mkdir_p('app/assets') unless File.directory?('app/assets')
+      FileUtils.mkdir_p('app/assets/images') unless File.directory?('app/assets/images')
       FileUtils.mkdir_p(directory_name) unless File.directory?(directory_name)
       graph.output(:png => "#{directory_name}/#{graph_name.present? ? graph_name : "graph_#{DateTime.now.strftime('%H%M%S%L')}" }.png" )
     end
