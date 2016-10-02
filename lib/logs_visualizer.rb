@@ -237,4 +237,7 @@ module LogsVisualizer
       graph.output(:png => "#{directory_name}/#{graph_name.present? ? graph_name : "graph_#{DateTime.now.strftime('%H%M%S%L')}" }.png" )
     end
   end
+
+  private_class_method :populate_data
+  private_class_method :populate_graph
 end
